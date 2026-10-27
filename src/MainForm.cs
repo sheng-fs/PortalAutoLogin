@@ -21,6 +21,7 @@ namespace PortalAutoLogin
         private bool _busy;
         private bool _suppressToggle;
         private bool _balloonShown;
+        private DateTime _lastAutoDetect = DateTime.MinValue;
 
         private Dot _dot;
         private Label _title;
@@ -30,6 +31,7 @@ namespace PortalAutoLogin
         private Label _accountValue;
         private Label _countValue;
         private Label _intervalValue;
+        private Label _portalValue;
         private RoundedButton _btnLogin;
         private RoundedButton _btnOpen;
         private RoundedButton _btnPause;
@@ -72,7 +74,7 @@ namespace PortalAutoLogin
         private void BuildUi()
         {
             Text = "PortalAutoLogin 门户自动登录";
-            ClientSize = new Size(540, 604);
+            ClientSize = new Size(540, 636);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
@@ -141,24 +143,25 @@ namespace PortalAutoLogin
 
             var infoCard = new CardPanel();
             infoCard.Location = new Point(24, 250);
-            infoCard.Size = new Size(492, 124);
+            infoCard.Size = new Size(492, 160);
             Controls.Add(infoCard);
 
             AddInfo(infoCard, "本机 IP", 24, 22, out _ipValue);
             AddInfo(infoCard, "账号", 256, 22, out _accountValue);
             AddInfo(infoCard, "今日自动重登", 24, 70, out _countValue);
             AddInfo(infoCard, "检测间隔", 256, 70, out _intervalValue);
+            AddInfo(infoCard, "认证服务器", 24, 118, out _portalValue, 444);
 
             _btnLogin = new RoundedButton();
             _btnLogin.Text = "立即登录";
-            _btnLogin.Location = new Point(24, 392);
+            _btnLogin.Location = new Point(24, 424);
             _btnLogin.Size = new Size(140, 40);
             _btnLogin.Click += delegate { LoginNow(); };
             Controls.Add(_btnLogin);
 
             _btnOpen = new RoundedButton();
             _btnOpen.Text = "打开认证页";
-            _btnOpen.Location = new Point(176, 392);
+            _btnOpen.Location = new Point(176, 424);
             _btnOpen.Size = new Size(132, 40);
             _btnOpen.FillColor = Color.White;
             _btnOpen.HoverColor = Color.FromArgb(246, 246, 246);
@@ -170,7 +173,7 @@ namespace PortalAutoLogin
 
             _btnPause = new RoundedButton();
             _btnPause.Text = "暂停自动登录";
-            _btnPause.Location = new Point(320, 392);
+            _btnPause.Location = new Point(320, 424);
             _btnPause.Size = new Size(150, 40);
             _btnPause.FillColor = Color.White;
             _btnPause.HoverColor = Color.FromArgb(246, 246, 246);
@@ -181,7 +184,7 @@ namespace PortalAutoLogin
             Controls.Add(_btnPause);
 
             var autoCard = new CardPanel();
-            autoCard.Location = new Point(24, 448);
+            autoCard.Location = new Point(24, 480);
             autoCard.Size = new Size(492, 64);
             Controls.Add(autoCard);
 
@@ -209,11 +212,11 @@ namespace PortalAutoLogin
             lblAutoSub.BackColor = Color.Transparent;
             autoCard.Controls.Add(lblAutoSub);
 
-            var linkSettings = MakeLink("设置", new Point(24, 534));
+            var linkSettings = MakeLink("设置", new Point(24, 566));
             linkSettings.Click += delegate { OpenSettings(); };
             Controls.Add(linkSettings);
 
-            var linkLog = MakeLink("查看日志", new Point(78, 534));
+            var linkLog = MakeLink("查看日志", new Point(78, 566));
             linkLog.Click += delegate { OpenLog(); };
             Controls.Add(linkLog);
 
@@ -222,7 +225,7 @@ namespace PortalAutoLogin
             lblVersion.ForeColor = Theme.Faint;
             lblVersion.Font = Theme.UI(8.5f);
             lblVersion.TextAlign = ContentAlignment.MiddleRight;
-            lblVersion.Location = new Point(400, 532);
+            lblVersion.Location = new Point(400, 564);
             lblVersion.Size = new Size(116, 20);
             lblVersion.BackColor = Color.Transparent;
             Controls.Add(lblVersion);
@@ -246,7 +249,7 @@ namespace PortalAutoLogin
             return lbl;
         }
 
-        private static void AddInfo(Control parent, string caption, int x, int y, out Label valueLabel)
+        private static void AddInfo(Control parent, string caption, int x, int y, out Label valueLabel, int valueWidth = 210)
         {
             var cap = new Label();
             cap.Text = caption;
@@ -262,7 +265,8 @@ namespace PortalAutoLogin
             val.ForeColor = Theme.Text;
             val.Font = Theme.UI(10f, FontStyle.Bold);
             val.Location = new Point(x, y + 20);
-            val.Size = new Size(210, 22);
+            val.Size = new Size(valueWidth, 22);
+            val.AutoEllipsis = valueWidth > 210;
             val.BackColor = Color.Transparent;
             parent.Controls.Add(val);
             valueLabel = val;
@@ -379,6 +383,7 @@ namespace PortalAutoLogin
             _ipValue.Text = client.LocalIp();
             _accountValue.Text = string.IsNullOrEmpty(_cfg.Account) ? "未设置" : _cfg.Account;
             _intervalValue.Text = Math.Max(5, _cfg.IntervalSeconds) + " 秒";
+            _portalValue.Text = string.IsNullOrEmpty(_cfg.PortalUrl) ? "待自动识别" : _cfg.PortalUrl;
 
             string today = DateTime.Now.ToString("yyyy-MM-dd");
             if (_cfg.CountDate != today)
@@ -481,8 +486,21 @@ namespace PortalAutoLogin
                     return;
                 }
 
-                SetStatus(UiState.Offline, "未连接", "检测到尚未认证，正在尝试自动登录…", Theme.Warn);
-                PortalResult result = client.Login();
+                SetStatus(UiState.Offline, "未连接", "检测到尚未认证，正在自动识别并尝试登录…", Theme.Warn);
+                if (!EnsurePortal())
+                {
+                    if (client.IsOnline())
+                    {
+                        SetStatus(UiState.Online, "已连接", "网络认证正常，无需登录", Theme.Ok);
+                    }
+                    else
+                    {
+                        SetStatus(UiState.Error, "未识别到认证服务器", "请确认已连接需要认证的网络后重试", Theme.Bad);
+                    }
+                    UpdateInfo();
+                    return;
+                }
+                PortalResult result = LoginWithDetection(client);
                 bool ok = result.Success || client.IsOnline();
                 if (ok)
                 {
@@ -519,7 +537,7 @@ namespace PortalAutoLogin
                 _busy = true;
             }
             _btnLogin.Enabled = false;
-            SetStatus(UiState.LoggingIn, "正在登录", "正在向认证服务器提交账号信息…", Theme.Accent);
+            SetStatus(UiState.LoggingIn, "正在登录", "正在识别认证服务器并提交账号信息…", Theme.Accent);
 
             Task.Run(delegate
             {
@@ -536,9 +554,13 @@ namespace PortalAutoLogin
                         result.AlreadyOnline = true;
                         result.Message = "当前网络已在线，无需登录";
                     }
+                    else if (!EnsurePortal())
+                    {
+                        error = "未识别到认证服务器，请确认已连接需要认证的网络。";
+                    }
                     else
                     {
-                        result = client.Login();
+                        result = LoginWithDetection(client);
                         ok = result.Success || client.IsOnline();
                     }
                 }
@@ -587,7 +609,82 @@ namespace PortalAutoLogin
 
         private void OpenPortalPage()
         {
-            string url = ConfigStore.EffectiveOpenUrl(_cfg);
+            if (!string.IsNullOrWhiteSpace(_cfg.PortalUrl))
+            {
+                OpenUrl(_cfg.PortalUrl);
+                return;
+            }
+
+            SetStatus(UiState.Checking, "正在识别认证服务器", "正在从当前网络获取 Portal 地址…", Theme.Idle);
+            Task.Run(delegate
+            {
+                PortalDetection detection = PortalDetector.Detect(_cfg.CheckUrl);
+                if (!string.IsNullOrEmpty(detection.PortalUrl)) ApplyDetectedPortal(detection);
+                Ui(delegate
+                {
+                    if (string.IsNullOrEmpty(_cfg.PortalUrl))
+                    {
+                        MessageBox.Show(this,
+                            detection.Online
+                                ? "当前网络已在线，暂未获取到认证服务器地址。请在掉线后再试。"
+                                : "未识别到认证服务器，请确认已连接需要认证的网络。",
+                            "PortalAutoLogin", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        SetStatus(UiState.Checking, "正在检测网络", "正在检查当前网络认证状态…", Theme.Idle);
+                        TriggerCheck();
+                        return;
+                    }
+                    OpenUrl(_cfg.PortalUrl);
+                    TriggerCheck();
+                });
+            });
+        }
+
+        private bool EnsurePortal()
+        {
+            if (!string.IsNullOrWhiteSpace(_cfg.PortalUrl)) return true;
+
+            _lastAutoDetect = DateTime.UtcNow;
+            PortalDetection detection = PortalDetector.Detect(_cfg.CheckUrl);
+            if (string.IsNullOrEmpty(detection.PortalUrl)) return false;
+
+            ApplyDetectedPortal(detection);
+            return true;
+        }
+
+        private PortalResult LoginWithDetection(PortalClient client)
+        {
+            PortalResult result = client.Login();
+            if (result.Success) return result;
+            if ((DateTime.UtcNow - _lastAutoDetect).TotalSeconds < 120) return result;
+
+            _lastAutoDetect = DateTime.UtcNow;
+            PortalDetection detection = PortalDetector.Detect(_cfg.CheckUrl);
+            if (!string.IsNullOrEmpty(detection.PortalUrl) &&
+                !SamePortal(detection.PortalUrl, _cfg.PortalUrl))
+            {
+                ApplyDetectedPortal(detection);
+                Log.Info("登录失败，已切换认证服务器并重试。");
+                result = client.Login();
+            }
+            return result;
+        }
+
+        private void ApplyDetectedPortal(PortalDetection detection)
+        {
+            _cfg.PortalUrl = detection.PortalUrl;
+            ConfigStore.Save(_cfg);
+            Log.Info("自动识别认证服务器：" + detection.PortalUrl + "（" + detection.Evidence + "）");
+            UpdateInfo();
+        }
+
+        private static bool SamePortal(string left, string right)
+        {
+            return string.Equals((left ?? "").TrimEnd('/'), (right ?? "").TrimEnd('/'),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void OpenUrl(string url)
+        {
             try
             {
                 var uri = new Uri(url);
@@ -595,7 +692,7 @@ namespace PortalAutoLogin
             }
             catch
             {
-                MessageBox.Show(this, "链接无效：" + url + "\n请在设置中修改。", "PortalAutoLogin", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, "链接无效：" + url, "PortalAutoLogin", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 

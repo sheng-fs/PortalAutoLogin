@@ -11,11 +11,10 @@ namespace PortalAutoLogin
     {
         public string Account = "";
         public string PasswordProtected = "";
-        public string PortalUrl = "http://portal.example.com";
+        public string PortalUrl = "";
         public string LoginPath = "/drcom/login";
         public int EportalPort = 803;
         public string CheckUrl = "http://connect.rom.miui.com/generate_204";
-        public string OpenUrl = "";
         public int IntervalSeconds = 15;
         public bool AutoStart = true;
         public bool Paused = false;
@@ -54,7 +53,8 @@ namespace PortalAutoLogin
                     string json = File.ReadAllText(ConfigFile, Encoding.UTF8);
                     var cfg = new JavaScriptSerializer().Deserialize<AppConfig>(json);
                     if (cfg == null) return null;
-                    if (string.IsNullOrEmpty(cfg.PortalUrl)) cfg.PortalUrl = "http://portal.example.com";
+                    if (IsLegacyExamplePortal(cfg.PortalUrl)) cfg.PortalUrl = "";
+                    if (cfg.PortalUrl == null) cfg.PortalUrl = "";
                     if (string.IsNullOrEmpty(cfg.LoginPath)) cfg.LoginPath = "/drcom/login";
                     if (cfg.EportalPort <= 0) cfg.EportalPort = 803;
                     if (cfg.IntervalSeconds < 5) cfg.IntervalSeconds = 15;
@@ -110,9 +110,10 @@ namespace PortalAutoLogin
             }
         }
 
-        public static string EffectiveOpenUrl(AppConfig cfg)
+        private static bool IsLegacyExamplePortal(string url)
         {
-            return string.IsNullOrWhiteSpace(cfg.OpenUrl) ? cfg.PortalUrl : cfg.OpenUrl;
+            return !string.IsNullOrEmpty(url) &&
+                   url.IndexOf("portal.example.com", StringComparison.OrdinalIgnoreCase) >= 0;
         }
     }
 }

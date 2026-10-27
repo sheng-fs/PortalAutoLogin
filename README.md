@@ -4,24 +4,19 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 
 单文件、免安装运行库、托盘常驻；开机后自动启动，掉线时自动重新登录；密码使用 Windows DPAPI 加密保存在本机。
 
-当前版本：**v1.0.0**
+当前版本：**v1.1.0**
 
 作者：**sheng-fs**
 
-<p align="center">
-  <img src="assets/screenshots/main.png" width="360" alt="主界面">
-  <img src="assets/screenshots/settings.png" width="360" alt="设置">
-</p>
-
 ## 功能
 
-- **自动登录**：检测到未认证（掉线、会话过期、开机）时，自动向 Portal 提交账号密码。
+- **自动识别认证地址**：掉线时自动从当前网络（Captive Portal 重定向 / 默认网关）发现 Portal 地址并保存，用户只需填写账号和密码，不需要手动输入链接。
+- **自动登录**：检测到未认证（掉线、会话过期、开机）时，自动向 Portal 提交账号密码；登录失败会自动重新识别地址并重试一次。
 - **开机自启**：首次配置时创建“登录 Windows 后启动”的计划任务，以 `--tray` 隐藏启动；程序移动路径后会自动修复任务。
 - **托盘常驻**：关闭窗口不退出；托盘图标颜色表示在线 / 重试 / 离线 / 暂停。
-- **状态面板**：显示本机 IP、账号、今日自动重登次数、上次登录时间、检测间隔。
-- **自定义链接**
-  - `认证服务器地址`：不同学校、酒店、园区填自己的 Portal，不写死域名。
-  - `打开链接（可选）`：主界面“打开认证页”打开此链接，可填自服务、公告页等任意地址；留空则打开 Portal。
+- **状态面板**：显示本机 IP、账号、今日自动重登次数、上次登录时间、检测间隔、已识别的认证服务器。
+- **认证地址**
+  - 程序自动识别并保存 Portal 地址；设置页展示识别结果，也可点“自动识别”重新获取。
   - 高级项：登录接口路径、ePortal 端口、在线检测地址，用于适配不同的 Dr.COM 部署。
 - **安全存储**：密码用 DPAPI（CurrentUser）加密，只有当前 Windows 用户能解密；日志中的密码以 `***` 脱敏。
 - **可诊断**：内置日志、`--test` 自检、登录失败时弹窗展示服务器原始响应。
@@ -32,23 +27,28 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 1. 双击 `PortalAutoLogin.exe`（Windows 10 / 11 自带 .NET Framework 4.8，无需额外安装）。
 2. 首次启动会弹出配置窗口：
    - 填写 Portal 账号和密码（学号、工号、房间号等）；
-   - Portal 地址默认 `http://portal.example.com`，首次使用时改成你所在单位的地址；
-   - 需要时填写“打开链接”；
+   - 认证服务器无需填写，程序会在需要认证的网络下自动识别；
    - 保持“开机自动启动”开启（默认开启）。
-3. 点“保存”，程序进入托盘并开始检测。
+3. 点“保存”，程序进入托盘并开始检测；识别到 Portal 后会自动保存到配置中。
 4. 验证：打开 Portal 页面点“注销”，约 15 秒内应自动恢复为“已登录”。
 
 > 首次验证必须用真实密码完成一次注销测试；程序内置的协议调用已做在线连通性验证，但密码正确性只能在真实掉线场景确认。
 
-## 适配不同 Portal / 自定义链接
+## 适配不同 Portal / 自动识别
 
 | 设置项 | 说明 |
 | --- | --- |
-| 认证服务器地址 | 认证 Portal 的根地址，如 `http://portal.example.com`。支持 `http://` 与 `https://`。 |
-| 打开链接（可选） | “打开认证页”按钮的目标地址；留空使用 Portal 地址。 |
+| 认证服务器地址 | 无需手动填写。程序会从 Captive Portal 的 HTTP 重定向或默认网关中识别地址，并保存到配置。 |
+| 自动识别 | 设置页可手动触发一次识别；掉线时程序也会自动识别，登录失败会重新识别并重试。 |
 | 登录接口 | 默认 `/drcom/login`，即 Portal 的认证接口路径。 |
 | ePortal 端口 | 默认 `803`，用于读取页面配置（`loadConfig`）。 |
 | 在线检测地址 | 默认 `http://connect.rom.miui.com/generate_204`；若被网络拦截，可换任意返回 204 的地址。 |
+
+> 自动识别依赖网络把未认证用户的 HTTP 请求重定向到 Portal。若某个网络不返回重定向，程序会尝试默认网关；仍失败时请确认已连接到需要认证的网络。
+
+## 鸿蒙版本
+
+工作区目录下的 `PortalAutoLogin-HarmonyOS` 是独立的 HarmonyOS（ArkTS / Stage 模型）工程，使用相同名称与图标。用 DevEco Studio 打开并配置自动签名即可运行；目前支持前台自动识别与自动登录，后台常驻需后续结合系统后台任务能力扩展。
 
 ## 数据与安全
 
@@ -60,7 +60,7 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 | 开机自启 | 计划任务 `PortalAutoLogin`（失败时回退到启动文件夹快捷方式） |
 
 - 密码使用 Windows DPAPI `CurrentUser` + 固定熵加密；换 Windows 用户或重装系统后无法解密，需要重新配置。
-- 程序不向任何第三方上传数据；网络请求只发往你配置的 Portal 与在线检测地址。
+- 程序不向任何第三方上传数据；网络请求只发往自动识别的 Portal 与在线检测地址。
 - 日志不会记录明文密码；登录请求 URL 中的 `upass`、`user_password` 会替换为 `***`。
 - 共享电脑请谨慎保存账号密码；不再使用时可按下方“卸载”清理。
 
@@ -68,14 +68,14 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 
 版本号同时维护在两处，编译时会校验一致性：
 
-- `VERSION`（如 `1.0.0`）
+- `VERSION`（如 `1.1.0`）
 - `src/AssemblyInfo.cs` 中的 `AssemblyFileVersion`
 
 版本号可见位置：
 
 - 主界面右下角
 - 设置页左下角
-- 日志启动行：`程序启动 v1.0.0`
+- 日志启动行：`程序启动 v1.1.0`
 - `--test` 生成的 `selftest.txt`
 
 升级步骤：
@@ -90,8 +90,8 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 
 ```bash
 git add .
-git commit -m "chore: PortalAutoLogin v1.0.0"
-git tag -a v1.0.0 -m "PortalAutoLogin v1.0.0"
+git commit -m "chore: PortalAutoLogin v1.1.0"
+git tag -a v1.1.0 -m "PortalAutoLogin v1.1.0"
 ```
 
 之后每次发布：同步修改 `VERSION` 与 `src/AssemblyInfo.cs`，更新 `CHANGELOG.md`，提交并打同名 tag。
@@ -115,7 +115,7 @@ git tag -a v1.0.0 -m "PortalAutoLogin v1.0.0"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-输出：项目根目录下的 `PortalAutoLogin.exe`（约 83 KB，单文件）。
+输出：项目根目录下的 `PortalAutoLogin.exe`（约 90 KB，单文件）。
 
 图标由 `tools\draw-icon.ps1` 用代码绘制，再通过 `tools\make-ico.ps1` 生成多尺寸 ICO，不依赖外部素材：
 
@@ -144,6 +144,7 @@ PortalAutoLogin/
 │  ├─ MainForm.cs          # 主界面与托盘
 │  ├─ SettingsForm.cs      # 设置 / 首次配置
 │  ├─ PortalClient.cs      # Dr.COM Portal 登录协议
+│  ├─ PortalDetector.cs    # Captive Portal / 网关自动识别
 │  ├─ AutoStart.cs         # 计划任务 / 启动项
 │  ├─ AppConfig.cs         # 配置与 DPAPI 加密
 │  ├─ Logger.cs            # 日志
@@ -171,14 +172,15 @@ PortalAutoLogin/
 检查“任务计划程序”中是否存在 `PortalAutoLogin` 任务；若被安全软件拦截，请手动允许。也可在应用内关闭再开启一次“开机自动启动”。
 
 **换学校 / 换酒店 / 换 Portal？**
-修改“认证服务器地址”；若对方不是 Dr.COM 系 Portal，登录接口与参数通常不同，需要适配协议，本工具不保证通用。
+程序会自动重新识别认证服务器；若对方不是 Dr.COM 系 Portal，登录接口与参数通常不同，需要适配协议，本工具不保证通用。
 
 **密码保存在哪里？安全吗？**
 `config.json` 中只有 DPAPI 密文，没有明文；只有当前 Windows 用户能解密。重装系统或换用户后需重新输入。
 
 ## 已知限制
 
-- 仅支持 Windows。
+- Windows 版仅支持 Windows；鸿蒙版本为工作区内同级目录的独立工程 `PortalAutoLogin-HarmonyOS`。
+- 自动识别依赖网络返回 Captive Portal 重定向或可用的默认网关；极少数仅支持 HTTPS 登录页的网络可能无法识别。
 - 仅适配 Dr.COM / 城市热点 Portal 的 Web 认证流程；门户升级后可能需要更新参数。
 - 单实例、单 Windows 用户；多用户需各自配置。
 - 不包含自动检查更新，需手动替换 exe。

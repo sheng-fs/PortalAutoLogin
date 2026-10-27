@@ -44,18 +44,6 @@ namespace PortalAutoLogin
             }
         }
 
-        public static string NormalizePortal(string input)
-        {
-            if (string.IsNullOrWhiteSpace(input)) return "";
-            string s = input.Trim();
-            if (!s.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
-                !s.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            {
-                s = "http://" + s;
-            }
-            return s.TrimEnd('/');
-        }
-
         public string LocalIp()
         {
             try

@@ -1,6 +1,7 @@
-﻿﻿using System;
+using System;
 using System.Drawing;
 using System.Reflection;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace PortalAutoLogin
@@ -13,25 +14,28 @@ namespace PortalAutoLogin
         private TextBox _txtAccount;
         private TextBox _txtPassword;
         private TextBox _txtPortal;
-        private TextBox _txtOpenUrl;
         private TextBox _txtLoginPath;
         private TextBox _txtCheckUrl;
         private NumericUpDown _numPort;
         private NumericUpDown _numInterval;
         private ToggleSwitch _toggleAuto;
         private CheckBox _chkShow;
+        private RoundedButton _btnDetect;
+        private Label _detectHint;
+        private string _detectedPortal;
 
         public SettingsForm(AppConfig cfg)
         {
             _firstRun = cfg == null;
             _cfg = cfg ?? new AppConfig();
+            _detectedPortal = _cfg.PortalUrl ?? "";
             BuildUi();
         }
 
         private void BuildUi()
         {
             Text = _firstRun ? "PortalAutoLogin 首次设置" : "PortalAutoLogin 设置";
-            ClientSize = new Size(500, 680);
+            ClientSize = new Size(500, 600);
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -50,7 +54,7 @@ namespace PortalAutoLogin
             Controls.Add(title);
 
             var sub = new Label();
-            sub.Text = _firstRun ? "填写 Portal 账号和密码，保存后即可自动登录。" : "修改账号、认证地址与自动登录行为。";
+            sub.Text = _firstRun ? "只需填写账号和密码，认证服务器会自动识别。" : "修改账号、密码与自动登录行为。";
             sub.ForeColor = Theme.SubText;
             sub.Location = new Point(24, 46);
             sub.Size = new Size(452, 20);
@@ -72,15 +76,41 @@ namespace PortalAutoLogin
             _chkShow.CheckedChanged += delegate { _txtPassword.UseSystemPasswordChar = !_chkShow.Checked; };
             Controls.Add(_chkShow);
 
-            y += 76;
-            _txtPortal = AddText("认证服务器地址（Portal）", y, _cfg.PortalUrl);
-            AddHint("例如 http://portal.example.com；各单位填自己的地址。", y + 48);
+            y = 206;
+            Controls.Add(MakeCaption("认证服务器（自动识别，无需填写）", 24, y));
+            _txtPortal = new TextBox();
+            _txtPortal.Text = string.IsNullOrEmpty(_detectedPortal) ? "尚未识别，连接认证网络后自动获取" : _detectedPortal;
+            _txtPortal.Location = new Point(24, y + 20);
+            _txtPortal.Size = new Size(342, 26);
+            _txtPortal.BorderStyle = BorderStyle.FixedSingle;
+            _txtPortal.ReadOnly = true;
+            _txtPortal.BackColor = Color.White;
+            _txtPortal.TabStop = false;
+            Controls.Add(_txtPortal);
 
-            y += 76;
-            _txtOpenUrl = AddText("打开链接（可选）", y, _cfg.OpenUrl);
-            AddHint("留空则打开 Portal 地址；也可填任意链接。", y + 48);
+            _btnDetect = new RoundedButton();
+            _btnDetect.Text = "自动识别";
+            _btnDetect.Location = new Point(374, y + 18);
+            _btnDetect.Size = new Size(102, 30);
+            _btnDetect.FillColor = Color.White;
+            _btnDetect.HoverColor = Color.FromArgb(246, 246, 246);
+            _btnDetect.DownColor = Color.FromArgb(238, 238, 238);
+            _btnDetect.BorderColor = Theme.InputBorder;
+            _btnDetect.TextColor = Theme.Text;
+            _btnDetect.Click += delegate { DetectNow(); };
+            Controls.Add(_btnDetect);
 
-            y += 82;
+            _detectHint = new Label();
+            _detectHint.Text = "连接需要认证的网络后，程序会自动识别并保存 Portal 地址。";
+            _detectHint.ForeColor = Theme.Faint;
+            _detectHint.Font = Theme.UI(8.2f);
+            _detectHint.Location = new Point(24, y + 50);
+            _detectHint.Size = new Size(452, 20);
+            _detectHint.AutoEllipsis = true;
+            _detectHint.BackColor = Color.Transparent;
+            Controls.Add(_detectHint);
+
+            y = 282;
             var advanced = new Label();
             advanced.Text = "高级设置（一般无需修改）";
             advanced.ForeColor = Theme.Faint;
@@ -90,7 +120,7 @@ namespace PortalAutoLogin
             advanced.BackColor = Color.Transparent;
             Controls.Add(advanced);
 
-            y += 24;
+            y = 306;
             var lblPath = MakeCaption("登录接口", 24, y);
             Controls.Add(lblPath);
             _txtLoginPath = new TextBox();
@@ -111,7 +141,7 @@ namespace PortalAutoLogin
             _numPort.BorderStyle = BorderStyle.FixedSingle;
             Controls.Add(_numPort);
 
-            y += 58;
+            y = 364;
             var lblInterval = MakeCaption("检测间隔（秒）", 24, y);
             Controls.Add(lblInterval);
             _numInterval = new NumericUpDown();
@@ -132,7 +162,7 @@ namespace PortalAutoLogin
             _txtCheckUrl.BorderStyle = BorderStyle.FixedSingle;
             Controls.Add(_txtCheckUrl);
 
-            y += 62;
+            y = 426;
             var autoCard = new CardPanel();
             autoCard.Location = new Point(24, y);
             autoCard.Size = new Size(452, 58);
@@ -165,21 +195,21 @@ namespace PortalAutoLogin
             note.Text = "密码使用 Windows DPAPI 加密，仅当前 Windows 用户可解密。";
             note.ForeColor = Theme.Faint;
             note.Font = Theme.UI(8.2f);
-            note.Location = new Point(24, y + 68);
+            note.Location = new Point(24, 494);
             note.Size = new Size(452, 20);
             note.BackColor = Color.Transparent;
             Controls.Add(note);
 
             var btnSave = new RoundedButton();
             btnSave.Text = "保存";
-            btnSave.Location = new Point(276, 612);
+            btnSave.Location = new Point(276, 532);
             btnSave.Size = new Size(96, 36);
             btnSave.Click += delegate { Save(); };
             Controls.Add(btnSave);
 
             var btnCancel = new RoundedButton();
             btnCancel.Text = "取消";
-            btnCancel.Location = new Point(380, 590);
+            btnCancel.Location = new Point(380, 532);
             btnCancel.Size = new Size(96, 36);
             btnCancel.FillColor = Color.White;
             btnCancel.HoverColor = Color.FromArgb(246, 246, 246);
@@ -193,7 +223,7 @@ namespace PortalAutoLogin
             lblVersion.Text = "PortalAutoLogin v" + Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
             lblVersion.ForeColor = Theme.Faint;
             lblVersion.Font = Theme.UI(8.2f);
-            lblVersion.Location = new Point(24, 626);
+            lblVersion.Location = new Point(24, 544);
             lblVersion.Size = new Size(220, 20);
             lblVersion.BackColor = Color.Transparent;
             Controls.Add(lblVersion);
@@ -230,26 +260,52 @@ namespace PortalAutoLogin
             return lbl;
         }
 
-        private void AddHint(string text, int y)
+        private void DetectNow()
         {
-            var lbl = new Label();
-            lbl.Text = text;
-            lbl.ForeColor = Theme.Faint;
-            lbl.Font = Theme.UI(8.2f);
-            lbl.Location = new Point(24, y);
-            lbl.AutoSize = false;
-            lbl.AutoEllipsis = true;
-            lbl.Size = new Size(452, 20);
-            lbl.BackColor = Color.Transparent;
-            Controls.Add(lbl);
+            if (_btnDetect == null || !_btnDetect.Enabled) return;
+            _btnDetect.Enabled = false;
+            _btnDetect.Text = "识别中…";
+            _detectHint.ForeColor = Theme.SubText;
+            _detectHint.Text = "正在向当前网络探测认证服务器地址…";
+
+            Task.Run(delegate
+            {
+                PortalDetection detection = PortalDetector.Detect(_cfg.CheckUrl);
+                try
+                {
+                    BeginInvoke(new Action(delegate
+                    {
+                        _btnDetect.Enabled = true;
+                        _btnDetect.Text = "自动识别";
+                        if (!string.IsNullOrEmpty(detection.PortalUrl))
+                        {
+                            _detectedPortal = detection.PortalUrl;
+                            _txtPortal.Text = detection.PortalUrl;
+                            _detectHint.ForeColor = Theme.Ok;
+                            _detectHint.Text = "已识别：" + detection.Evidence;
+                        }
+                        else if (detection.Online)
+                        {
+                            _detectHint.ForeColor = Theme.SubText;
+                            _detectHint.Text = "当前网络已在线，无需识别；掉线后会自动识别。";
+                        }
+                        else
+                        {
+                            _detectHint.ForeColor = Theme.Bad;
+                            _detectHint.Text = "未识别到认证服务器，请确认已连接需要认证的网络。";
+                        }
+                    }));
+                }
+                catch
+                {
+                }
+            });
         }
 
         private void Save()
         {
             string account = _txtAccount.Text.Trim();
             string password = _txtPassword.Text;
-            string portal = PortalClient.NormalizePortal(_txtPortal.Text);
-            string openUrl = _txtOpenUrl.Text.Trim();
             string loginPath = _txtLoginPath.Text.Trim();
             string checkUrl = _txtCheckUrl.Text.Trim();
 
@@ -264,26 +320,6 @@ namespace PortalAutoLogin
                 Warn("请填写密码。");
                 _txtPassword.Focus();
                 return;
-            }
-            Uri uri;
-            if (portal.Length == 0 || !Uri.TryCreate(portal, UriKind.Absolute, out uri) ||
-                (uri.Scheme != "http" && uri.Scheme != "https"))
-            {
-                Warn("认证服务器地址无效，请填写形如 http://portal.example.com 的地址。");
-                _txtPortal.Focus();
-                return;
-            }
-            if (openUrl.Length > 0)
-            {
-                string normalizedOpen = PortalClient.NormalizePortal(openUrl);
-                Uri openUri;
-                if (!Uri.TryCreate(normalizedOpen, UriKind.Absolute, out openUri))
-                {
-                    Warn("打开链接无效。");
-                    _txtOpenUrl.Focus();
-                    return;
-                }
-                openUrl = normalizedOpen;
             }
             if (loginPath.Length == 0)
             {
@@ -306,8 +342,7 @@ namespace PortalAutoLogin
             bool wasAuto = AutoStart.IsEnabled();
             _cfg.Account = account;
             if (!string.IsNullOrEmpty(password)) _cfg.PasswordProtected = ConfigStore.ProtectPassword(password);
-            _cfg.PortalUrl = portal;
-            _cfg.OpenUrl = openUrl;
+            _cfg.PortalUrl = _detectedPortal ?? "";
             _cfg.LoginPath = loginPath;
             _cfg.CheckUrl = checkUrl;
             _cfg.EportalPort = (int)_numPort.Value;
@@ -324,7 +359,9 @@ namespace PortalAutoLogin
             if (wantAuto) AutoStart.Enable(Application.ExecutablePath);
             else if (wasAuto) AutoStart.Disable();
 
-            Log.Info("设置已保存：账号=" + account + " Portal=" + portal + " 间隔=" + _cfg.IntervalSeconds + "s");
+            Log.Info("设置已保存：账号=" + account + " Portal=" +
+                     (string.IsNullOrEmpty(_cfg.PortalUrl) ? "待自动识别" : _cfg.PortalUrl) +
+                     " 间隔=" + _cfg.IntervalSeconds + "s");
             DialogResult = DialogResult.OK;
             Close();
         }

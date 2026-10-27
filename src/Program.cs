@@ -124,15 +124,35 @@ namespace PortalAutoLogin
                 var client = new PortalClient(cfg);
                 sb.AppendLine("时间: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
                 sb.AppendLine("账号: " + cfg.Account);
-                sb.AppendLine("Portal: " + cfg.PortalUrl);
+                sb.AppendLine("Portal（自动识别）: " + (string.IsNullOrEmpty(cfg.PortalUrl) ? "待识别" : cfg.PortalUrl));
                 sb.AppendLine("登录接口: " + cfg.LoginPath);
+
+                if (string.IsNullOrEmpty(cfg.PortalUrl))
+                {
+                    PortalDetection detection = PortalDetector.Detect(cfg.CheckUrl);
+                    if (!string.IsNullOrEmpty(detection.PortalUrl))
+                    {
+                        cfg.PortalUrl = detection.PortalUrl;
+                        ConfigStore.Save(cfg);
+                        sb.AppendLine("自动识别: " + detection.PortalUrl + "（" + detection.Evidence + "）");
+                    }
+                    else if (detection.Online)
+                    {
+                        sb.AppendLine("自动识别: 当前已在线（" + detection.Evidence + "），暂不需要 Portal 地址");
+                    }
+                    else
+                    {
+                        sb.AppendLine("自动识别: 未识别到认证服务器");
+                    }
+                }
+
                 sb.AppendLine("本机 IP: " + client.LocalIp());
 
                 bool online = client.IsOnline();
                 sb.AppendLine("登录前在线: " + online);
 
                 PortalResult result = null;
-                if (!online)
+                if (!online && !string.IsNullOrEmpty(cfg.PortalUrl))
                 {
                     result = client.Login();
                     sb.AppendLine("登录结果: " + (result.Success ? "成功" : "失败"));
