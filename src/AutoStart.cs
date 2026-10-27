@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Microsoft.Win32;
 
 namespace PortalAutoLogin
 {
@@ -7,6 +8,8 @@ namespace PortalAutoLogin
     {
         private const string TaskName = "PortalAutoLogin";
         private const string StartupLnkName = "PortalAutoLogin.lnk";
+        private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        private const string RunValue = "PortalAutoLogin";
 
         private static string StartupLink
         {
@@ -24,88 +27,74 @@ namespace PortalAutoLogin
 
         public static bool IsEnabled()
         {
-            try
-            {
-                dynamic service = Connect();
-                dynamic root = service.GetFolder("\\");
-                dynamic task = root.GetTask(TaskName);
-                return task != null;
-            }
-            catch
-            {
-                return File.Exists(StartupLink);
-            }
+            string value = CurrentRunValue();
+            if (!string.IsNullOrEmpty(value)) return true;
+            return File.Exists(StartupLink);
         }
 
-        private static string CurrentTaskPath()
+        private static string CurrentRunValue()
         {
             try
             {
-                dynamic service = Connect();
-                dynamic root = service.GetFolder("\\");
-                dynamic task = root.GetTask(TaskName);
-                dynamic actions = task.Definition.Actions;
-                if (actions.Count >= 1) return Convert.ToString(actions.Item(1).Path);
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RunKey, false))
+                {
+                    if (key == null) return null;
+                    return key.GetValue(RunValue) as string;
+                }
             }
             catch
             {
+                return null;
             }
-            return null;
+        }
+
+        private static string Quote(string path)
+        {
+            return "\"" + path + "\"";
         }
 
         public static bool Enable(string exePath)
         {
+            bool runKeyOk = false;
             try
             {
-                dynamic service = Connect();
-                dynamic root = service.GetFolder("\\");
-                dynamic def = service.NewTask(0);
-                def.RegistrationInfo.Description = "PortalAutoLogin 门户自动登录（登录 Windows 后后台运行）";
-                def.Principal.LogonType = 3; // TASK_LOGON_INTERACTIVE_TOKEN
-                def.Settings.Enabled = true;
-                def.Settings.ExecutionTimeLimit = "PT0S";
-                def.Settings.DisallowStartIfOnBatteries = false;
-                def.Settings.StopIfGoingOnBatteries = false;
-                def.Settings.StartWhenAvailable = true;
-                def.Settings.MultipleInstances = 2; // TASK_INSTANCES_IGNORE_NEW
-                def.Settings.RestartCount = 3;
-                def.Settings.RestartInterval = "PT1M";
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKey))
+                {
+                    key.SetValue(RunValue, Quote(exePath) + " --tray", RegistryValueKind.String);
+                    runKeyOk = true;
+                }
+                Log.Info("已写入开机自启注册表：" + exePath);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("写入开机自启注册表失败：" + ex.Message + "，改用启动文件夹。");
+            }
 
-                dynamic trigger = def.Triggers.Create(9); // TASK_TRIGGER_LOGON
-                trigger.UserId = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
-                trigger.Delay = "PT5S";
+            if (runKeyOk)
+            {
+                TryDelete(StartupLink);
+                RemoveLegacyTask();
+                return true;
+            }
 
-                dynamic action = def.Actions.Create(0); // TASK_ACTION_EXEC
-                action.Path = exePath;
-                action.Arguments = "--tray";
-                action.WorkingDirectory = Path.GetDirectoryName(exePath);
-
-                root.RegisterTaskDefinition(TaskName, def, 6, null, null, 3);
-                Log.Info("已注册开机自启计划任务：" + exePath);
-                if (File.Exists(StartupLink)) File.Delete(StartupLink);
+            try
+            {
+                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+                dynamic shell = Activator.CreateInstance(shellType);
+                dynamic lnk = shell.CreateShortcut(StartupLink);
+                lnk.TargetPath = exePath;
+                lnk.Arguments = "--tray";
+                lnk.WorkingDirectory = Path.GetDirectoryName(exePath);
+                lnk.WindowStyle = 7;
+                lnk.Save();
+                Log.Info("已创建启动文件夹快捷方式：" + StartupLink);
+                RemoveLegacyTask();
                 return true;
             }
             catch (Exception ex)
             {
-                Log.Warn("注册计划任务失败：" + ex.Message + "，改用启动文件夹。");
-                try
-                {
-                    Type shellType = Type.GetTypeFromProgID("WScript.Shell");
-                    dynamic shell = Activator.CreateInstance(shellType);
-                    dynamic lnk = shell.CreateShortcut(StartupLink);
-                    lnk.TargetPath = exePath;
-                    lnk.Arguments = "--tray";
-                    lnk.WorkingDirectory = Path.GetDirectoryName(exePath);
-                    lnk.WindowStyle = 7;
-                    lnk.Save();
-                    Log.Info("已创建启动文件夹快捷方式：" + StartupLink);
-                    return true;
-                }
-                catch (Exception ex2)
-                {
-                    Log.Error("创建启动项失败：" + ex2.Message);
-                    return false;
-                }
+                Log.Error("创建启动项失败：" + ex.Message);
+                return false;
             }
         }
 
@@ -113,29 +102,47 @@ namespace PortalAutoLogin
         {
             try
             {
-                dynamic service = Connect();
-                dynamic root = service.GetFolder("\\");
-                root.DeleteTask(TaskName, 0);
-                Log.Info("已删除开机自启计划任务。");
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RunKey, true))
+                {
+                    if (key != null) key.DeleteValue(RunValue, false);
+                }
+                Log.Info("已删除开机自启注册表项。");
             }
             catch
             {
             }
+            TryDelete(StartupLink);
+            RemoveLegacyTask();
+        }
+
+        public static void Ensure(string exePath)
+        {
+            // 每次启动都按当前 exe 路径重写自启项，避免程序目录移动后仍启动旧版本。
+            Enable(exePath);
+        }
+
+        private static void TryDelete(string path)
+        {
             try
             {
-                if (File.Exists(StartupLink)) File.Delete(StartupLink);
+                if (File.Exists(path)) File.Delete(path);
             }
             catch
             {
             }
         }
 
-        public static void Ensure(string exePath)
+        private static void RemoveLegacyTask()
         {
-            string current = CurrentTaskPath();
-            if (current == null || !string.Equals(current, exePath, StringComparison.OrdinalIgnoreCase))
+            try
             {
-                Enable(exePath);
+                dynamic service = Connect();
+                dynamic root = service.GetFolder("\\");
+                root.DeleteTask(TaskName, 0);
+                Log.Info("已移除旧版开机自启计划任务。");
+            }
+            catch
+            {
             }
         }
     }

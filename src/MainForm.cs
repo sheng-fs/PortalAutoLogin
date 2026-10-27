@@ -15,13 +15,17 @@ namespace PortalAutoLogin
         private enum UiState { Checking, Online, Offline, LoggingIn, Paused, Error }
 
         private readonly AppConfig _cfg;
+        private readonly PortalClient _client;
         private readonly bool _startHidden;
+        private UiState _lastUiState = (UiState)(-1);
         private bool _allowShow;
         private bool _exiting;
         private bool _busy;
         private bool _suppressToggle;
         private bool _balloonShown;
         private DateTime _lastAutoDetect = DateTime.MinValue;
+        private string _cachedIp = "";
+        private DateTime _cachedIpAt = DateTime.MinValue;
 
         private Dot _dot;
         private Label _title;
@@ -46,11 +50,13 @@ namespace PortalAutoLogin
         private Icon _iconError;
 
         private System.Threading.Timer _timer;
+        private System.Threading.Timer _trimTimer;
         private object _tickLock = new object();
 
         public MainForm(AppConfig cfg, bool startHidden)
         {
             _cfg = cfg;
+            _client = new PortalClient(_cfg);
             _startHidden = startHidden;
             BuildUi();
             BuildTray();
@@ -58,7 +64,21 @@ namespace PortalAutoLogin
             UpdateInfo();
             SetStatus(UiState.Checking, "正在检测网络", "正在检查当前网络认证状态…", Theme.Idle);
             _timer = new System.Threading.Timer(OnTick, null, 1200, Math.Max(5, _cfg.IntervalSeconds) * 1000);
+            _trimTimer = new System.Threading.Timer(delegate { MemoryTrim.Trim(); }, null, 5000, Timeout.Infinite);
             System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += OnNetworkChanged;
+            if (_startHidden)
+            {
+                try
+                {
+                    _tray.BalloonTipTitle = "PortalAutoLogin 已在后台运行";
+                    _tray.BalloonTipText = "可在任务栏右下角的 ^ 中找到托盘图标。";
+                    _tray.ShowBalloonTip(3000);
+                    _balloonShown = true;
+                }
+                catch
+                {
+                }
+            }
         }
 
         public void ShowFromTray()
@@ -296,6 +316,7 @@ namespace PortalAutoLogin
             _tray.ContextMenuStrip = _menu;
             _tray.Visible = true;
             _tray.DoubleClick += delegate { ShowFromTray(); };
+            Log.Info("托盘图标已创建。");
         }
 
         private Icon MakeBadgeIcon(Color dotColor)
@@ -362,8 +383,9 @@ namespace PortalAutoLogin
             _dot.Invalidate();
             _title.Text = title;
             _detail.Text = detail;
-            if (_tray != null)
+            if (_tray != null && state != _lastUiState)
             {
+                _lastUiState = state;
                 if (state == UiState.Online) _tray.Icon = _iconOk;
                 else if (state == UiState.Error) _tray.Icon = _iconError;
                 else if (state == UiState.LoggingIn || state == UiState.Checking) _tray.Icon = _iconBusy;
@@ -379,8 +401,13 @@ namespace PortalAutoLogin
                 try { BeginInvoke(new Action(UpdateInfo)); } catch { }
                 return;
             }
-            var client = new PortalClient(_cfg);
-            _ipValue.Text = client.LocalIp();
+            var client = _client;
+            if ((DateTime.UtcNow - _cachedIpAt).TotalSeconds >= 30)
+            {
+                _cachedIp = client.LocalIp();
+                _cachedIpAt = DateTime.UtcNow;
+            }
+            _ipValue.Text = string.IsNullOrEmpty(_cachedIp) ? "0.0.0.0" : _cachedIp;
             _accountValue.Text = string.IsNullOrEmpty(_cfg.Account) ? "未设置" : _cfg.Account;
             _intervalValue.Text = Math.Max(5, _cfg.IntervalSeconds) + " 秒";
             _portalValue.Text = string.IsNullOrEmpty(_cfg.PortalUrl) ? "待自动识别" : _cfg.PortalUrl;
@@ -477,25 +504,34 @@ namespace PortalAutoLogin
 
             try
             {
-                var client = new PortalClient(_cfg);
-                bool online = client.IsOnline();
-                if (online)
+                NetworkKind kind = NetworkGuard.ActiveKind();
+                if (kind != NetworkKind.Wifi)
                 {
-                    SetStatus(UiState.Online, "已连接", "网络认证正常，无需登录", Theme.Ok);
+                    SetStatus(UiState.Paused, "自动登录待机",
+                        "当前为" + NetworkGuard.Describe(kind) + "，仅在需要认证的 Wi-Fi 下启用", Theme.Idle);
                     UpdateInfo();
                     return;
                 }
 
-                SetStatus(UiState.Offline, "未连接", "检测到尚未认证，正在自动识别并尝试登录…", Theme.Warn);
+                var client = _client;
+                bool online = client.IsOnline();
+                if (online)
+                {
+                    SetStatus(UiState.Online, "已连接", "Wi-Fi 认证正常，无需登录", Theme.Ok);
+                    UpdateInfo();
+                    return;
+                }
+
+                SetStatus(UiState.Offline, "未连接", "检测到 Wi-Fi 尚未认证，正在自动识别并尝试登录…", Theme.Warn);
                 if (!EnsurePortal())
                 {
                     if (client.IsOnline())
                     {
-                        SetStatus(UiState.Online, "已连接", "网络认证正常，无需登录", Theme.Ok);
+                        SetStatus(UiState.Online, "已连接", "Wi-Fi 认证正常，无需登录", Theme.Ok);
                     }
                     else
                     {
-                        SetStatus(UiState.Error, "未识别到认证服务器", "请确认已连接需要认证的网络后重试", Theme.Bad);
+                        SetStatus(UiState.Paused, "自动登录待机", "当前 Wi-Fi 未检测到认证门户", Theme.Idle);
                     }
                     UpdateInfo();
                     return;
@@ -546,7 +582,7 @@ namespace PortalAutoLogin
                 string error = null;
                 try
                 {
-                    var client = new PortalClient(_cfg);
+                    var client = _client;
                     if (client.IsOnline())
                     {
                         ok = true;
@@ -799,6 +835,7 @@ namespace PortalAutoLogin
             try
             {
                 if (_timer != null) _timer.Dispose();
+                if (_trimTimer != null) _trimTimer.Dispose();
             }
             catch
             {
@@ -808,6 +845,11 @@ namespace PortalAutoLogin
                 _tray.Visible = false;
                 _tray.Dispose();
                 _tray = null;
+            }
+            if (_menu != null)
+            {
+                _menu.Dispose();
+                _menu = null;
             }
             var icons = new[] { _iconOk, _iconIdle, _iconBusy, _iconError };
             foreach (var ic in icons)

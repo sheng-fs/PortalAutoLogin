@@ -77,15 +77,13 @@ namespace PortalAutoLogin
             Controls.Add(_chkShow);
 
             y = 206;
-            Controls.Add(MakeCaption("认证服务器（自动识别，无需填写）", 24, y));
+            Controls.Add(MakeCaption("认证服务器（自动识别，可手动填写）", 24, y));
             _txtPortal = new TextBox();
-            _txtPortal.Text = string.IsNullOrEmpty(_detectedPortal) ? "尚未识别，连接认证网络后自动获取" : _detectedPortal;
+            _txtPortal.Text = _detectedPortal ?? "";
             _txtPortal.Location = new Point(24, y + 20);
             _txtPortal.Size = new Size(342, 26);
             _txtPortal.BorderStyle = BorderStyle.FixedSingle;
-            _txtPortal.ReadOnly = true;
             _txtPortal.BackColor = Color.White;
-            _txtPortal.TabStop = false;
             Controls.Add(_txtPortal);
 
             _btnDetect = new RoundedButton();
@@ -101,7 +99,7 @@ namespace PortalAutoLogin
             Controls.Add(_btnDetect);
 
             _detectHint = new Label();
-            _detectHint.Text = "连接需要认证的网络后，程序会自动识别并保存 Portal 地址。";
+            _detectHint.Text = "自动识别失败时可手动填写，例如 http://202.113.95.244";
             _detectHint.ForeColor = Theme.Faint;
             _detectHint.Font = Theme.UI(8.2f);
             _detectHint.Location = new Point(24, y + 50);
@@ -308,6 +306,7 @@ namespace PortalAutoLogin
             string password = _txtPassword.Text;
             string loginPath = _txtLoginPath.Text.Trim();
             string checkUrl = _txtCheckUrl.Text.Trim();
+            string portal = (_txtPortal.Text ?? "").Trim();
 
             if (account.Length == 0)
             {
@@ -338,11 +337,22 @@ namespace PortalAutoLogin
                     return;
                 }
             }
+            if (portal.Length > 0)
+            {
+                Uri portalUri;
+                if (!Uri.TryCreate(portal, UriKind.Absolute, out portalUri) ||
+                    (portalUri.Scheme != Uri.UriSchemeHttp && portalUri.Scheme != Uri.UriSchemeHttps))
+                {
+                    Warn("认证服务器地址无效，请填写以 http:// 或 https:// 开头的地址。");
+                    _txtPortal.Focus();
+                    return;
+                }
+            }
 
             bool wasAuto = AutoStart.IsEnabled();
             _cfg.Account = account;
             if (!string.IsNullOrEmpty(password)) _cfg.PasswordProtected = ConfigStore.ProtectPassword(password);
-            _cfg.PortalUrl = _detectedPortal ?? "";
+            _cfg.PortalUrl = portal;
             _cfg.LoginPath = loginPath;
             _cfg.CheckUrl = checkUrl;
             _cfg.EportalPort = (int)_numPort.Value;
