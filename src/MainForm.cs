@@ -23,6 +23,8 @@ namespace PortalAutoLogin
         private bool _busy;
         private bool _suppressToggle;
         private bool _balloonShown;
+        private volatile bool _pendingShow;
+        private volatile bool _uiVisible;
         private DateTime _lastAutoDetect = DateTime.MinValue;
         private string _cachedIp = "";
         private DateTime _cachedIpAt = DateTime.MinValue;
@@ -64,7 +66,7 @@ namespace PortalAutoLogin
             UpdateInfo();
             SetStatus(UiState.Checking, "正在检测网络", "正在检查当前网络认证状态…", Theme.Idle);
             _timer = new System.Threading.Timer(OnTick, null, 1200, Math.Max(5, _cfg.IntervalSeconds) * 1000);
-            _trimTimer = new System.Threading.Timer(delegate { MemoryTrim.Trim(); }, null, 5000, Timeout.Infinite);
+            _trimTimer = new System.Threading.Timer(OnTrimTick, null, 30000, Timeout.Infinite);
             System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += OnNetworkChanged;
             if (_startHidden)
             {
@@ -83,12 +85,56 @@ namespace PortalAutoLogin
 
         public void ShowFromTray()
         {
+            _pendingShow = true;
+            try
+            {
+                // 句柄尚未创建时先挂起，等 OnHandleCreated 后再由 UI 线程显示，
+                // 避免在其它线程创建/显示窗口导致界面无响应。
+                if (!IsHandleCreated) return;
+                if (InvokeRequired)
+                {
+                    BeginInvoke(new Action(ShowFromTray));
+                    return;
+                }
+                ShowCore();
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("显示主界面失败：" + ex.Message);
+            }
+        }
+
+        private void ShowCore()
+        {
+            _pendingShow = false;
             _allowShow = true;
             ShowInTaskbar = true;
-            Show();
+            if (!Visible) Show();
             if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
             Activate();
             BringToFront();
+            UpdateInfo();
+            TriggerCheck();
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            if (_pendingShow)
+            {
+                try { BeginInvoke(new Action(ShowCore)); } catch { }
+            }
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            _uiVisible = Visible;
+            // 窗口隐藏后再安排一次工作集整理，保证后台常驻时内存保持低位。
+            if (!Visible && _trimTimer != null)
+            {
+                try { _trimTimer.Change(20000, Timeout.Infinite); } catch { }
+            }
         }
 
         private void BuildUi()
@@ -481,6 +527,14 @@ namespace PortalAutoLogin
         private void TriggerCheck()
         {
             try { _timer.Change(200, Math.Max(5, _cfg.IntervalSeconds) * 1000); } catch { }
+        }
+
+        private void OnTrimTick(object state)
+        {
+            // 只在后台隐藏、没有检测任务时整理工作集，避免用户正在操作界面时卡顿甚至被判定为无响应。
+            if (_exiting || _uiVisible) return;
+            if (_busy) return;
+            MemoryTrim.Trim();
         }
 
         private void OnNetworkChanged(object sender, System.Net.NetworkInformation.NetworkAvailabilityEventArgs e)

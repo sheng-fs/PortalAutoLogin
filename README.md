@@ -1,10 +1,10 @@
-# PortalAutoLogin 门户自动登录
+﻿﻿# PortalAutoLogin 门户自动登录
 
 Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用于校园网、酒店、园区等需要 Portal 认证的网络。
 
 单文件、免安装运行库、托盘常驻；开机后自动启动，掉线时自动重新登录；密码使用 Windows DPAPI 加密保存在本机。
 
-当前版本：**v1.2.0**
+当前版本：**v1.2.1**
 
 作者：**sheng-fs**
 
@@ -33,7 +33,7 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
    - 认证服务器无需填写，程序会在需要认证的 Wi-Fi 下自动识别；识别失败时也可以手动填写；
    - 保持“开机自动启动”开启（默认开启）。
 3. 点“保存”，程序进入托盘并开始检测；识别到 Portal 后会自动保存到配置中。
-4. 验证：打开 Portal 页面点“注销”，约 15 秒内应自动恢复为“已登录”。
+4. 验证：打开 Portal 页面点“注销”，约 5 秒内应自动恢复为“已登录”。
 
 > 首次验证必须用真实密码完成一次注销测试；程序内置的协议调用已做在线连通性验证，但密码正确性只能在真实掉线场景确认。
 
@@ -72,14 +72,14 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 
 版本号同时维护在两处，编译时会校验一致性：
 
-- `VERSION`（如 `1.2.0`）
+- `VERSION`（如 `1.2.1`）
 - `src/AssemblyInfo.cs` 中的 `AssemblyFileVersion`
 
 版本号可见位置：
 
 - 主界面右下角
 - 设置页左下角
-- 日志启动行：`程序启动 v1.2.0`
+- 日志启动行：`程序启动 v1.2.1`
 - `--test` 生成的 `selftest.txt`
 
 升级步骤：
@@ -94,8 +94,8 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 
 ```bash
 git add .
-git commit -m "chore: PortalAutoLogin v1.2.0"
-git tag -a v1.2.0 -m "PortalAutoLogin v1.2.0"
+git commit -m "chore: PortalAutoLogin v1.2.1"
+git tag -a v1.2.1 -m "PortalAutoLogin v1.2.1"
 ```
 
 之后每次发布：同步修改 `VERSION` 与 `src/AssemblyInfo.cs`，更新 `CHANGELOG.md`，提交并打同名 tag。

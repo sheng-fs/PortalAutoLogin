@@ -68,6 +68,9 @@ namespace PortalAutoLogin
                 _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\PortalAutoLogin.Show");
                 var form = new MainForm(cfg, tray);
 
+                // 提前在 UI 线程创建窗口句柄，后续从其它线程唤起界面时才能安全地切回 UI 线程。
+                try { IntPtr handle = form.Handle; } catch { }
+
                 var waiter = new Thread(delegate ()
                 {
                     while (true)

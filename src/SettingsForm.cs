@@ -99,7 +99,7 @@ namespace PortalAutoLogin
             Controls.Add(_btnDetect);
 
             _detectHint = new Label();
-            _detectHint.Text = "自动识别失败时可手动填写，例如 http://202.113.95.244";
+            _detectHint.Text = "自动识别失败时可手动填写，例如 http://192.168.1.1";
             _detectHint.ForeColor = Theme.Faint;
             _detectHint.Font = Theme.UI(8.2f);
             _detectHint.Location = new Point(24, y + 50);
