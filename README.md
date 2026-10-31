@@ -4,7 +4,9 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 
 单文件、免安装运行库、托盘常驻；开机后自动启动，掉线时自动重新登录；密码使用 Windows DPAPI 加密保存在本机。
 
-当前版本：**v1.2.1**
+Windows 版为托盘程序；Linux 版是同一套认证流程的静态二进制 + systemd 服务，见 [Linux 版本](#linux-版本)。
+
+当前版本：**v1.3.0**
 
 作者：**sheng-fs**
 
@@ -24,6 +26,7 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 - **可诊断**：内置日志、`--test` 自检、登录失败时弹窗展示服务器原始响应。
 - **高 DPI**：125% / 150% 缩放下界面自适应。
 - **低内存占用**：复用网络客户端、缓存本机 IP、减少托盘图标重绘，启动后整理工作集。
+- **Linux 版**：无运行时依赖的静态二进制（x64 / arm64），命令行配置，systemd 开机自启与掉线自动重登。
 
 ## 快速开始
 
@@ -49,6 +52,75 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 | 在线检测地址 | 默认 `http://connect.rom.miui.com/generate_204`；若被网络拦截，可换任意返回 204 的地址。 |
 
 > 自动识别依赖网络把未认证用户的 HTTP 请求重定向到 Portal。若某个网络不返回重定向，程序会尝试默认网关；仍失败时请确认已连接到需要认证的网络。
+
+## Linux 版本
+
+Linux 版使用同一套 Dr.COM / ePortal 认证流程，编译为无运行时依赖的静态二进制（x64 / arm64），提供命令行与 systemd 常驻服务。适用于任何使用 systemd 的发行版，不依赖 GTK/Qt 等桌面环境，也不包含托盘界面。
+
+### 一条命令安装
+
+```bash
+wget -O '/tmp/PortalAutoLogin-linux-x64.tar.gz' 'https://github.com/sheng-fs/PortalAutoLogin/releases/download/v1.3.0/PortalAutoLogin-linux-x64.tar.gz' \
+  && sudo mkdir -p '/opt/portalautologin' \
+  && sudo tar -xzf '/tmp/PortalAutoLogin-linux-x64.tar.gz' -C '/opt/portalautologin' \
+  && sudo '/opt/portalautologin/install.sh' \
+  && rm '/tmp/PortalAutoLogin-linux-x64.tar.gz'
+```
+
+ARM64 机器把文件名里的 `x64` 换成 `arm64`。安装脚本会：
+
+- 把二进制放到 `/opt/portalautologin/portalautologin`；
+- 链接命令到 `/usr/local/bin/portalautologin`；
+- 以当前 `sudo` 用户创建并启动 `/etc/systemd/system/portalautologin.service`。
+
+### 配置与使用
+
+```bash
+portalautologin config        # 交互式填写账号密码；认证服务器可留空自动识别
+portalautologin status        # 在线状态、认证服务器、上次登录、今日重登次数
+portalautologin login         # 立即检测并登录一次
+portalautologin test          # 自检，结果写入 ~/.config/portalautologin/selftest.txt
+portalautologin logs -f       # 跟踪日志
+```
+
+非交互式配置（适合脚本）：
+
+```bash
+printf '你的密码\n' | portalautologin config --account 学号 --password-stdin
+```
+
+服务由 systemd 托管，开机自动启动、掉线自动重登：
+
+```bash
+systemctl status portalautologin
+journalctl -u portalautologin -f
+```
+
+修改配置后守护进程会在下一轮检测自动加载，不需要重启服务。
+
+### Linux 数据与安全
+
+| 项目 | 位置 |
+| --- | --- |
+| 配置（含加密后的密码） | `~/.config/portalautologin/config.conf`（权限 0600） |
+| 日志 | `~/.config/portalautologin/logs/portalautologin.log` |
+| 自检结果 | `~/.config/portalautologin/selftest.txt` |
+| systemd 服务 | `/etc/systemd/system/portalautologin.service` |
+
+- 密码使用 AES-256-GCM 加密，密钥由 `/etc/machine-id` 与当前 UID 派生；换机器或换用户后需要重新配置。
+- 日志中的 `upass`、`user_password` 统一显示为 `***`。
+- 仅在检测到未认证时登录；`wifi_only=true` 时只在 Wi-Fi 网络下启用（默认 `false`，有线 Portal 也可用）。
+- 卸载：`sudo /opt/portalautologin/uninstall.sh`（不会删除用户配置）。
+
+### 从源码构建 Linux 版
+
+需要 Go 1.22 或更高版本：
+
+```bash
+./linux/build.sh
+```
+
+输出 `dist/PortalAutoLogin-linux-x64.tar.gz` 与 `dist/PortalAutoLogin-linux-arm64.tar.gz`，目录结构与 Release 下载包一致。
 
 ## 鸿蒙版本
 
@@ -79,7 +151,7 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 
 - 主界面右下角
 - 设置页左下角
-- 日志启动行：`程序启动 v1.2.1`
+- 日志启动行：`程序启动 v1.3.0`
 - `--test` 生成的 `selftest.txt`
 
 升级步骤：
@@ -107,7 +179,13 @@ git tag -a v1.2.1 -m "PortalAutoLogin v1.2.1"
 3. 删除 `%LOCALAPPDATA%\PortalAutoLogin` 文件夹；
 4. 删除 `PortalAutoLogin.exe`。
 
-## 从源码构建
+Linux 版卸载：
+
+```bash
+sudo /opt/portalautologin/uninstall.sh
+```
+
+## 从源码构建（Windows）
 
 要求：
 
@@ -128,7 +206,7 @@ powershell -File .\tools\draw-icon.ps1
 powershell -File .\tools\make-ico.ps1 -Png .\assets\icon-source.png -Ico .\assets\PortalAutoLogin.ico
 ```
 
-## 命令行
+## 命令行（Windows）
 
 | 参数 | 用途 |
 | --- | --- |
@@ -163,6 +241,18 @@ PortalAutoLogin/
 ├─ tools/
 │  ├─ draw-icon.ps1        # 代码绘制图标原图
 │  └─ make-ico.ps1         # 由 PNG 生成多尺寸 ICO
+├─ linux/                  # Linux 版（Go，CLI + systemd）
+│  ├─ main.go              # 命令入口：status / login / config / daemon / test / logs
+│  ├─ portal.go            # Dr.COM Portal 登录协议
+│  ├─ detect.go            # Captive Portal 自动识别
+│  ├─ netguard.go          # 默认路由与 Wi-Fi 判断
+│  ├─ config.go            # 配置、AES-GCM 密码加密、状态统计
+│  ├─ http.go / log.go / daemon.go
+│  ├─ install.sh           # 安装脚本（写入 systemd 服务）
+│  ├─ uninstall.sh
+│  ├─ portalautologin.service
+│  └─ build.sh             # 生成 dist/*.tar.gz
+├─ dist/                   # Linux 打包产物（不入库）
 ├─ CHANGELOG.md
 ├─ LICENSE
 ├─ .gitignore
@@ -172,7 +262,7 @@ PortalAutoLogin/
 ## 常见问题
 
 **登录失败怎么办？**
-界面会弹出服务器原始响应。先确认账号密码、Portal 地址正确，再把 `%LOCALAPPDATA%\PortalAutoLogin\logs\portalautologin.log` 末尾内容发给维护者。
+界面会弹出服务器原始响应。先确认账号密码、Portal 地址正确，再把 `%LOCALAPPDATA%\PortalAutoLogin\logs\portalautologin.log` 末尾内容发给维护者。Linux 版对应日志为 `~/.config/portalautologin/logs/portalautologin.log`，也可执行 `portalautologin test` 或 `portalautologin logs -n 100` 查看。
 
 **开机没有自动启动？**
 检查注册表 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 中是否有 `PortalAutoLogin`，或任务管理器“启动”页是否被禁用；若被安全软件拦截，请手动允许。也可在应用内关闭再开启一次“开机自动启动”。Windows 11 的托盘图标可能被收纳到任务栏 `^` 溢出区，可拖动到任务栏固定显示。
@@ -181,15 +271,15 @@ PortalAutoLogin/
 程序会自动重新识别认证服务器；若对方不是 Dr.COM 系 Portal，登录接口与参数通常不同，需要适配协议，本工具不保证通用。
 
 **密码保存在哪里？安全吗？**
-`config.json` 中只有 DPAPI 密文，没有明文；只有当前 Windows 用户能解密。重装系统或换用户后需重新输入。
+Windows 版 `config.json` 中只有 DPAPI 密文，没有明文；只有当前 Windows 用户能解密。Linux 版 `config.conf` 中的密码使用 AES-256-GCM 加密，文件权限 0600。重装系统或换用户后需重新输入。
 
 ## 已知限制
 
-- Windows 版仅支持 Windows；鸿蒙版本为工作区内同级目录的独立工程 `PortalAutoLogin-HarmonyOS`。
+- Windows 版仅支持 Windows；Linux 版为静态二进制 + CLI + systemd 服务（无托盘界面）；鸿蒙版本为工作区内同级目录的独立工程 `PortalAutoLogin-HarmonyOS`。
 - 自动识别依赖网络返回 Captive Portal 重定向或可用的默认网关；极少数仅支持 HTTPS 登录页的网络可能无法识别。
 - 仅适配 Dr.COM / 城市热点 Portal 的 Web 认证流程；门户升级后可能需要更新参数。
-- 单实例、单 Windows 用户；多用户需各自配置。
-- 不包含自动检查更新，需手动替换 exe。
+- Windows 版单实例、单 Windows 用户；Linux 版每个系统用户各自配置；多用户需各自配置。
+- 不包含自动检查更新，需手动替换 exe 或重新执行安装命令。
 - 不修改系统代理、DNS 或网络适配器设置。
 
 ## 名称与商标

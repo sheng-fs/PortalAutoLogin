@@ -9,6 +9,18 @@
 - 可选的版本更新检查
 - 更多 Portal 厂商的协议适配
 
+## [1.3.0] - 2026-10-31
+
+### 新增
+
+- Linux 版：Go 静态二进制（x64 / arm64），命令行 + systemd 常驻服务，适用于任何 systemd 发行版。
+- Linux 版支持 Dr.COM / ePortal 认证服务器自动识别、自动登录、失败后重新识别重试、仅 Wi-Fi 启用、今日重登统计。
+- 提供 tar.gz 一键安装包（含 `install.sh`、`uninstall.sh`、systemd 单元），可用 `wget` 一条命令安装到 `/opt/portalautologin`。
+
+### 变更
+
+- 版本号更新至 1.3.0（Windows 与 Linux 共用版本号）。
+
 ## [1.2.2] - 2026-10-28
 
 ### 新增
