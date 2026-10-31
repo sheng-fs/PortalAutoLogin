@@ -25,19 +25,36 @@ if [ -z "$RUN_HOME" ] || [ ! -d "$RUN_HOME" ]; then
 fi
 
 missing=()
-if ! ldconfig -p 2>/dev/null | grep -q 'libgtk-3.so.0'; then
-  missing+=("GTK3")
+ldconfig_bin=""
+for candidate in /sbin/ldconfig /usr/sbin/ldconfig /usr/bin/ldconfig; do
+  if [ -x "$candidate" ]; then
+    ldconfig_bin="$candidate"
+    break
+  fi
+done
+if [ -z "$ldconfig_bin" ]; then
+  ldconfig_bin="$(command -v ldconfig 2>/dev/null || true)"
 fi
-if ! ldconfig -p 2>/dev/null | grep -qE 'libayatana-appindicator3\.so|libappindicator3\.so'; then
-  missing+=("AppIndicator")
+
+if [ -n "$ldconfig_bin" ]; then
+  lib_cache="$("$ldconfig_bin" -p 2>/dev/null || true)"
+  echo "$lib_cache" | grep -q 'libgtk-3\.so' || missing+=("GTK3")
+  echo "$lib_cache" | grep -qE 'libayatana-appindicator3\.so|libappindicator3\.so' || missing+=("AppIndicator")
+else
+  # 没有 ldconfig 时用 ldd 检查实际依赖，避免误判。
+  linked="$(ldd "$BIN_PATH" 2>/dev/null || true)"
+  echo "$linked" | grep -q 'libgtk-3\.so' || missing+=("GTK3")
+  echo "$linked" | grep -qE 'libayatana-appindicator3\.so|libappindicator3\.so' || missing+=("AppIndicator")
 fi
+
 if [ "${#missing[@]}" -gt 0 ]; then
-  echo "缺少运行库：${missing[*]}" >&2
-  echo "请先安装（按发行版任选）：" >&2
+  echo "警告：未检测到运行库：${missing[*]}"
+  echo "托盘界面需要 GTK3 + AppIndicator；如果启动失败，请按发行版安装：" >&2
   echo "  Debian/Ubuntu: sudo apt install libgtk-3-0 libayatana-appindicator3-1" >&2
   echo "  Fedora:        sudo dnf install gtk3 libayatana-appindicator-gtk3" >&2
   echo "  Arch:          sudo pacman -S gtk3 libayatana-appindicator" >&2
-  exit 1
+  echo "安装将继续；标准版（静态二进制 + systemd）不需要这些依赖。" >&2
+  echo >&2
 fi
 
 chmod 0755 "$BIN_PATH"

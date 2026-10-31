@@ -12,6 +12,30 @@ fi
 
 mkdir -p "$DIST"
 
+UPX_BIN="${UPX_BIN:-}"
+if [ "${NO_UPX:-0}" = "1" ]; then
+  UPX_BIN=""
+elif [ -z "$UPX_BIN" ]; then
+  UPX_BIN="$(command -v upx 2>/dev/null || true)"
+fi
+
+pack_binary() {
+  local bin="$1"
+  if [ -n "$UPX_BIN" ] && [ -x "$UPX_BIN" ]; then
+    # UPX 自身会读取名为 UPX 的环境变量，这里清掉，避免与路径混淆。
+    if ! env -u UPX "$UPX_BIN" --best --lzma "$bin" >/tmp/upx-pack.log 2>&1; then
+      echo "UPX 压缩失败，保留未压缩二进制：$bin" >&2
+      tail -5 /tmp/upx-pack.log >&2
+    fi
+  fi
+}
+
+if [ -n "$UPX_BIN" ]; then
+  echo "使用 UPX 压缩：$UPX_BIN"
+else
+  echo "未找到 upx，生成未压缩包（安装 upx 后体积约减小 25%）"
+fi
+
 for pair in "x64:amd64" "arm64:arm64"; do
   name="${pair%%:*}"
   arch="${pair##*:}"
@@ -30,6 +54,7 @@ for pair in "x64:amd64" "arm64:arm64"; do
   cp "$ROOT/linux/install.sh" "$ROOT/linux/uninstall.sh" "$ROOT/linux/portalautologin.service" "$stage/"
   cp "$ROOT/LICENSE" "$ROOT/README.md" "$stage/"
   chmod 0755 "$stage/portalautologin" "$stage/install.sh" "$stage/uninstall.sh"
+  pack_binary "$stage/portalautologin"
 
   tar -C "$stage" -czf "$DIST/PortalAutoLogin-linux-$name.tar.gz" .
   rm -rf "$stage"
@@ -52,6 +77,7 @@ if pkg-config --exists gtk+-3.0 ayatana-appindicator3-0.1 2>/dev/null; then
   cp "$ROOT/linux/install-tray.sh" "$ROOT/linux/uninstall-tray.sh" "$ROOT/linux/portalautologin.png" "$stage/"
   cp "$ROOT/LICENSE" "$ROOT/README.md" "$stage/"
   chmod 0755 "$stage/portalautologin-tray" "$stage/install-tray.sh" "$stage/uninstall-tray.sh"
+  pack_binary "$stage/portalautologin-tray"
 
   tar -C "$stage" -czf "$DIST/PortalAutoLogin-linux-x64-tray.tar.gz" .
   rm -rf "$stage"

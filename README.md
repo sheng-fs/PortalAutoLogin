@@ -6,7 +6,7 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 
 Windows 版为托盘程序；Linux 版提供无依赖静态二进制 + systemd 服务，以及风格一致的 GTK 托盘版，见 [Linux 版本](#linux-版本)。
 
-当前版本：**v1.4.0**
+当前版本：**v1.4.1**
 
 作者：**sheng-fs**
 
@@ -67,7 +67,7 @@ Linux 版与 Windows 版共用同一套 Dr.COM / ePortal 认证流程，提供�
 ### 标准版：一条命令安装
 
 ```bash
-wget -O '/tmp/PortalAutoLogin-linux-x64.tar.gz' 'https://github.com/sheng-fs/PortalAutoLogin/releases/download/v1.4.0/PortalAutoLogin-linux-x64.tar.gz' \
+wget -O '/tmp/PortalAutoLogin-linux-x64.tar.gz' 'https://github.com/sheng-fs/PortalAutoLogin/releases/download/v1.4.1/PortalAutoLogin-linux-x64.tar.gz' \
   && sudo mkdir -p '/opt/portalautologin' \
   && sudo tar -xzf '/tmp/PortalAutoLogin-linux-x64.tar.gz' -C '/opt/portalautologin' \
   && sudo '/opt/portalautologin/install.sh' \
@@ -83,7 +83,7 @@ ARM64 机器把文件名里的 `x64` 换成 `arm64`。安装脚本会：
 ### 托盘版：一条命令安装
 
 ```bash
-wget -O '/tmp/PortalAutoLogin-linux-x64-tray.tar.gz' 'https://github.com/sheng-fs/PortalAutoLogin/releases/download/v1.4.0/PortalAutoLogin-linux-x64-tray.tar.gz' \
+wget -O '/tmp/PortalAutoLogin-linux-x64-tray.tar.gz' 'https://github.com/sheng-fs/PortalAutoLogin/releases/download/v1.4.1/PortalAutoLogin-linux-x64-tray.tar.gz' \
   && sudo mkdir -p '/opt/portalautologin' \
   && sudo tar -xzf '/tmp/PortalAutoLogin-linux-x64-tray.tar.gz' -C '/opt/portalautologin' \
   && sudo '/opt/portalautologin/install-tray.sh' \
@@ -99,6 +99,8 @@ wget -O '/tmp/PortalAutoLogin-linux-x64-tray.tar.gz' 'https://github.com/sheng-f
 - 卸载：`sudo /opt/portalautologin/uninstall-tray.sh`。
 
 > 托盘版与标准版二选一即可，同时安装会重复检测。托盘版使用与 Windows 版相同的图标、状态卡片、信息卡片和蓝色主按钮样式。
+
+> 发布包使用 UPX 压缩以减小体积（托盘包约 2.5 MB，标准包约 2.1 MB）。首次启动会在内存中自解压；如果安全软件误报，可用 `NO_UPX=1 ./linux/build.sh` 生成未压缩版本。
 
 ### 配置与使用（标准版）
 
@@ -183,7 +185,7 @@ journalctl -u portalautologin -f
 
 - 主界面右下角
 - 设置页左下角
-- 日志启动行：`程序启动 v1.4.0`
+- 日志启动行：`程序启动 v1.4.1`
 - `--test` 生成的 `selftest.txt`
 
 升级步骤：
