@@ -4,9 +4,9 @@ Windows 网页认证门户（Dr.COM / 城市热点）自动登录工具，适用
 
 单文件、免安装运行库、托盘常驻；开机后自动启动，掉线时自动重新登录；密码使用 Windows DPAPI 加密保存在本机。
 
-Windows 版为托盘程序；Linux 版是同一套认证流程的静态二进制 + systemd 服务，见 [Linux 版本](#linux-版本)。
+Windows 版为托盘程序；Linux 版提供无依赖静态二进制 + systemd 服务，以及风格一致的 GTK 托盘版，见 [Linux 版本](#linux-版本)。
 
-当前版本：**v1.3.0**
+当前版本：**v1.4.0**
 
 作者：**sheng-fs**
 
@@ -26,7 +26,7 @@ Windows 版为托盘程序；Linux 版是同一套认证流程的静态二进制
 - **可诊断**：内置日志、`--test` 自检、登录失败时弹窗展示服务器原始响应。
 - **高 DPI**：125% / 150% 缩放下界面自适应。
 - **低内存占用**：复用网络客户端、缓存本机 IP、减少托盘图标重绘，启动后整理工作集。
-- **Linux 版**：无运行时依赖的静态二进制（x64 / arm64），命令行配置，systemd 开机自启与掉线自动重登。
+- **Linux 版**：无运行时依赖的静态二进制（x64 / arm64）+ systemd 服务；另有与 Windows 版视觉一致的 GTK 托盘版。
 
 ## 快速开始
 
@@ -55,12 +55,19 @@ Windows 版为托盘程序；Linux 版是同一套认证流程的静态二进制
 
 ## Linux 版本
 
-Linux 版使用同一套 Dr.COM / ePortal 认证流程，编译为无运行时依赖的静态二进制（x64 / arm64），提供命令行与 systemd 常驻服务。适用于任何使用 systemd 的发行版，不依赖 GTK/Qt 等桌面环境，也不包含托盘界面。
+Linux 版与 Windows 版共用同一套 Dr.COM / ePortal 认证流程，提供两种形态：
 
-### 一条命令安装
+- **标准版**：无运行时依赖的静态二进制（x64 / arm64），命令行 + systemd 服务，适用于任何 systemd 发行版。
+- **托盘版**：GTK3 + AppIndicator 图形界面（x64），主界面、设置窗口、托盘菜单和开机自启开关，视觉风格与 Windows 版一致。
+
+![Linux 托盘版主界面](assets/screenshots/linux-main.png)
+
+![Linux 设置窗口](assets/screenshots/linux-settings.png)
+
+### 标准版：一条命令安装
 
 ```bash
-wget -O '/tmp/PortalAutoLogin-linux-x64.tar.gz' 'https://github.com/sheng-fs/PortalAutoLogin/releases/download/v1.3.0/PortalAutoLogin-linux-x64.tar.gz' \
+wget -O '/tmp/PortalAutoLogin-linux-x64.tar.gz' 'https://github.com/sheng-fs/PortalAutoLogin/releases/download/v1.4.0/PortalAutoLogin-linux-x64.tar.gz' \
   && sudo mkdir -p '/opt/portalautologin' \
   && sudo tar -xzf '/tmp/PortalAutoLogin-linux-x64.tar.gz' -C '/opt/portalautologin' \
   && sudo '/opt/portalautologin/install.sh' \
@@ -73,7 +80,27 @@ ARM64 机器把文件名里的 `x64` 换成 `arm64`。安装脚本会：
 - 链接命令到 `/usr/local/bin/portalautologin`；
 - 以当前 `sudo` 用户创建并启动 `/etc/systemd/system/portalautologin.service`。
 
-### 配置与使用
+### 托盘版：一条命令安装
+
+```bash
+wget -O '/tmp/PortalAutoLogin-linux-x64-tray.tar.gz' 'https://github.com/sheng-fs/PortalAutoLogin/releases/download/v1.4.0/PortalAutoLogin-linux-x64-tray.tar.gz' \
+  && sudo mkdir -p '/opt/portalautologin' \
+  && sudo tar -xzf '/tmp/PortalAutoLogin-linux-x64-tray.tar.gz' -C '/opt/portalautologin' \
+  && sudo '/opt/portalautologin/install-tray.sh' \
+  && rm '/tmp/PortalAutoLogin-linux-x64-tray.tar.gz'
+```
+
+托盘版需要 GTK3 与 AppIndicator 运行库，安装脚本会自动检查并给出对应发行版的安装命令（Debian/Ubuntu、Fedora、Arch）。安装后：
+
+- 命令：`portalautologin-tray`；
+- 首次配置：`portalautologin-tray tray --settings`，或托盘菜单里的“设置…”；
+- 开机自启：写入 `~/.config/autostart/portalautologin-tray.desktop`，也可在主界面开关；
+- 托盘菜单：显示主界面、立即登录、设置、退出；关闭窗口只隐藏到托盘；
+- 卸载：`sudo /opt/portalautologin/uninstall-tray.sh`。
+
+> 托盘版与标准版二选一即可，同时安装会重复检测。托盘版使用与 Windows 版相同的图标、状态卡片、信息卡片和蓝色主按钮样式。
+
+### 配置与使用（标准版）
 
 ```bash
 portalautologin config        # 交互式填写账号密码；认证服务器可留空自动识别
@@ -106,21 +133,26 @@ journalctl -u portalautologin -f
 | 日志 | `~/.config/portalautologin/logs/portalautologin.log` |
 | 自检结果 | `~/.config/portalautologin/selftest.txt` |
 | systemd 服务 | `/etc/systemd/system/portalautologin.service` |
+| 托盘版自启动 | `~/.config/autostart/portalautologin-tray.desktop` |
 
 - 密码使用 AES-256-GCM 加密，密钥由 `/etc/machine-id` 与当前 UID 派生；换机器或换用户后需要重新配置。
 - 日志中的 `upass`、`user_password` 统一显示为 `***`。
 - 仅在检测到未认证时登录；`wifi_only=true` 时只在 Wi-Fi 网络下启用（默认 `false`，有线 Portal 也可用）。
-- 卸载：`sudo /opt/portalautologin/uninstall.sh`（不会删除用户配置）。
+- 卸载：标准版 `sudo /opt/portalautologin/uninstall.sh`，托盘版 `sudo /opt/portalautologin/uninstall-tray.sh`；均不会删除用户配置。
 
 ### 从源码构建 Linux 版
 
-需要 Go 1.22 或更高版本：
+需要 Go 1.22 或更高版本；托盘版还需要 GTK3 与 AppIndicator 开发库（Debian/Ubuntu：`libgtk-3-dev libayatana-appindicator3-dev`）：
 
 ```bash
 ./linux/build.sh
 ```
 
-输出 `dist/PortalAutoLogin-linux-x64.tar.gz` 与 `dist/PortalAutoLogin-linux-arm64.tar.gz`，目录结构与 Release 下载包一致。
+输出：
+
+- `dist/PortalAutoLogin-linux-x64.tar.gz`
+- `dist/PortalAutoLogin-linux-arm64.tar.gz`
+- `dist/PortalAutoLogin-linux-x64-tray.tar.gz`（缺少 GTK 开发库时自动跳过）
 
 ## 鸿蒙版本
 
@@ -151,7 +183,7 @@ journalctl -u portalautologin -f
 
 - 主界面右下角
 - 设置页左下角
-- 日志启动行：`程序启动 v1.3.0`
+- 日志启动行：`程序启动 v1.4.0`
 - `--test` 生成的 `selftest.txt`
 
 升级步骤：
@@ -241,16 +273,22 @@ PortalAutoLogin/
 ├─ tools/
 │  ├─ draw-icon.ps1        # 代码绘制图标原图
 │  └─ make-ico.ps1         # 由 PNG 生成多尺寸 ICO
-├─ linux/                  # Linux 版（Go，CLI + systemd）
-│  ├─ main.go              # 命令入口：status / login / config / daemon / test / logs
+├─ linux/                  # Linux 版（Go）
+│  ├─ main.go              # 命令入口：status / login / config / daemon / tray / test / logs
 │  ├─ portal.go            # Dr.COM Portal 登录协议
 │  ├─ detect.go            # Captive Portal 自动识别
 │  ├─ netguard.go          # 默认路由与 Wi-Fi 判断
 │  ├─ config.go            # 配置、AES-GCM 密码加密、状态统计
+│  ├─ gui_tray.go          # GTK 托盘版主界面 / 设置界面 / 自动重登
+│  ├─ indicator_tray.go    # AppIndicator 托盘图标封装
+│  ├─ gui_stub.go          # 标准版中的 tray 命令占位
 │  ├─ http.go / log.go / daemon.go
-│  ├─ install.sh           # 安装脚本（写入 systemd 服务）
+│  ├─ install.sh           # 标准版安装脚本（写入 systemd 服务）
 │  ├─ uninstall.sh
 │  ├─ portalautologin.service
+│  ├─ install-tray.sh      # 托盘版安装脚本（图标、自启动、应用菜单）
+│  ├─ uninstall-tray.sh
+│  ├─ portalautologin.png  # Linux 图标（由 Windows 图标生成）
 │  └─ build.sh             # 生成 dist/*.tar.gz
 ├─ dist/                   # Linux 打包产物（不入库）
 ├─ CHANGELOG.md
@@ -275,7 +313,7 @@ Windows 版 `config.json` 中只有 DPAPI 密文，没有明文；只有当前 W
 
 ## 已知限制
 
-- Windows 版仅支持 Windows；Linux 版为静态二进制 + CLI + systemd 服务（无托盘界面）；鸿蒙版本为工作区内同级目录的独立工程 `PortalAutoLogin-HarmonyOS`。
+- Windows 版仅支持 Windows；Linux 版提供静态 CLI + systemd 与 GTK 托盘两种包；鸿蒙版本为工作区内同级目录的独立工程 `PortalAutoLogin-HarmonyOS`。
 - 自动识别依赖网络返回 Captive Portal 重定向或可用的默认网关；极少数仅支持 HTTPS 登录页的网络可能无法识别。
 - 仅适配 Dr.COM / 城市热点 Portal 的 Web 认证流程；门户升级后可能需要更新参数。
 - Windows 版单实例、单 Windows 用户；Linux 版每个系统用户各自配置；多用户需各自配置。

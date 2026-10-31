@@ -33,6 +33,8 @@ func main() {
 		cmdConfig(args[1:])
 	case "daemon", "run":
 		cmdDaemon(args[1:])
+	case "tray", "--tray":
+		runTray()
 	case "test":
 		cmdTest(args[1:])
 	case "logs":
@@ -56,6 +58,8 @@ func usage() {
   portalautologin login [--verbose]   立即检测并登录一次
   portalautologin config [选项]       配置账号密码（无参数时进入交互式配置）
   portalautologin daemon              后台循环检测并自动重登（systemd 使用）
+  portalautologin tray [--hidden]     启动图形托盘界面（托盘版二进制）
+  portalautologin tray --settings     直接打开设置窗口（托盘版二进制）
   portalautologin test                自检并把结果写入 selftest.txt
   portalautologin logs [-f] [-n 50]   查看日志
   portalautologin version             显示版本
